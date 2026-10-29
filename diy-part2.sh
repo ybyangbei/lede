@@ -20,4 +20,16 @@
 # awk '/define Device\/cmiot_ax18/{f=1} f && /DEVICE_DTS_CONFIG/{print; print "\tDEVICE_PACKAGES := ipq-wifi-cmiot_ax18"; next} {print}' \
 #   target/linux/qualcommax/image/ipq60xx.mk > /tmp/ipq60xx.mk && mv /tmp/ipq60xx.mk target/linux/qualcommax/image/ipq60xx.mk
 
+# 禁用 mac80211 以避免 backports-6.18.39 与内核 6.12 不兼容（方案 1：无 WiFi）
+sed -i 's/^CONFIG_PACKAGE_kmod-mac80211=y/# CONFIG_PACKAGE_kmod-mac80211 is not set/' .config 2>/dev/null || true
+sed -i 's/^CONFIG_PACKAGE_mac80211=y/# CONFIG_PACKAGE_mac80211 is not set/' .config 2>/dev/null || true
+sed -i 's/^CONFIG_PACKAGE_kmod-cfg80211=y/# CONFIG_PACKAGE_kmod-cfg80211 is not set/' .config 2>/dev/null || true
+
+make defconfig
+sed -i 's/^CONFIG_PACKAGE_kmod-mac80211=y/# CONFIG_PACKAGE_kmod-mac80211 is not set/' .config 2>/dev/null || true
+sed -i 's/^CONFIG_PACKAGE_mac80211=y/# CONFIG_PACKAGE_mac80211 is not set/' .config 2>/dev/null || true
+sed -i 's/^CONFIG_PACKAGE_kmod-cfg80211=y/# CONFIG_PACKAGE_kmod-cfg80211 is not set/' .config 2>/dev/null || true
+make defconfig
+
+
 echo "diy-part2.sh 执行完成（本次未启用额外操作，按需编辑本文件）"
