@@ -1,0 +1,50 @@
+# CMIOT AX18 云编译（lede）
+
+基于 [coolsnowwolf/lede](https://github.com/coolsnowwolf/lede) 为 **CMIOT AX18** 编写的 GitHub Actions 云编译工作流。
+
+## 设备信息
+
+| 项目 | 值 |
+| --- | --- |
+| 平台 | `qualcommax` |
+| 子平台 | `ipq60xx` |
+| 设备 | `cmiot_ax18` |
+| SoC | `ipq6000` |
+| 内核 | 6.12（`KERNEL_PATCHVER`） |
+| 产物 | `bin/targets/qualcommax/ipq60xx/` |
+
+## 使用方法
+
+1. **Fork** [coolsnowwolf/lede](https://github.com/coolsnowwolf/lede) 到你自己的 GitHub 账号。
+2. 将本目录下的文件复制到你 fork 仓库根目录：
+   - `.github/workflows/build-cmiot-ax18.yml`
+   - `cmiot_ax18.config`（可选，自定义固件用）
+3. 推送后，打开 Actions 页面，选择 **Build CMIOT AX18** → **Run workflow** 手动触发。
+4. 编译完成后，固件在 Artifacts 中下载；手动触发时也会自动生成 GitHub Release。
+
+## 自定义固件
+
+编辑 `cmiot_ax18.config`（lede 的 `.config` 格式），例如：
+
+```text
+# 开启中文界面
+CONFIG_PACKAGE_luci-i18n-base-zh-cn=y
+
+# 开启科学上网（需启用 helloworld feed，workflow 已自动处理）
+CONFIG_PACKAGE_luci-app-ssr-plus=y
+```
+
+> 注意：`CONFIG_TARGET_qualcommax_ipq60xx_DEVICE_cmiot_ax18=y` 这行请保留，
+> 否则会编译出其它设备或不含本设备。
+
+## 固件刷写
+
+- `*-cmiot_ax18-squashfs-factory.ubi`：NAND 原厂/全新刷入
+- `*-cmiot_ax18-squashfs-sysupgrade.bin`：OpenWrt 系统内升级（sysupgrade）
+
+## 说明
+
+- Workflow 仅在 **Actions 页面手动触发**（Run workflow），不会自动运行。
+- 如需推送时自动触发，可取消 `push` 段的注释。
+- 首次编译时间较长（约 1-3 小时），`timeout-minutes` 设为 420 分钟。
+- 如需保留编译缓存加速二次编译，可自行添加 `actions/cache`（缓存 `lede/build_dir`、`lede/staging_dir`、`lede/dl`、`lede/tmp`、`~/.ccache`）。

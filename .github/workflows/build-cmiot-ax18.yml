@@ -1,0 +1,171 @@
+# ============================================================
+#  CMIOT AX18 云编译 Workflow
+#  仓库：https://github.com/coolsnowwolf/lede（需 fork）
+#  目标：qualcommax/ipq60xx  /  设备 cmiot_ax18  /  SOC ipq6000
+#
+#  触发方式：
+#    - 手动（workflow_dispatch）：在 Actions 页面点击 Run workflow
+#    - 推送（push）：默认关闭，需要时取消注释
+#
+#  自定义固件：编辑仓库根目录的 cmiot_ax18.config
+#  产物：GitHub Artifacts + GitHub Release（见 upload 步骤）
+# ============================================================
+
+name: Build CMIOT AX18
+
+on:
+  workflow_dispatch:
+    inputs:
+      update_feeds:
+        description: '更新 feeds（首次或 feed 变更时建议 true）'
+        required: false
+        default: true
+        type: boolean
+      build_ver:
+        description: '构建版本号（写入固件描述，可留空）'
+        required: false
+        default: ''
+        type: string
+  # push:
+  #   branches:
+  #     - master
+
+permissions:
+  contents: write          # 用于创建 Release
+  actions: write
+
+concurrency:
+  group: build-cmiot-ax18-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  TARGET: qualcommax/ipq60xx
+  DEVICE: cmiot_ax18
+  # 产物相对路径（bin/targets/qualcommax/ipq60xx/）
+  TARGET_OUT: bin/targets/qualcommax/ipq60xx
+
+jobs:
+  build:
+    name: Build CMIOT AX18 firmware
+    runs-on: ubuntu-24.04
+    timeout-minutes: 420
+
+    steps:
+      - name: Checkout lede source
+        uses: actions/checkout@v4
+        with:
+          path: lede
+
+      - name: Free disk space
+        uses: jlumbroso/free-disk-space@main
+        with:
+          tool-cache: true
+          android: true
+          dotnet: true
+          haskell: true
+          large-packages: false
+          swap-storage: true
+
+      - name: Install build dependencies
+        shell: bash
+        run: |
+          set -e
+          export DEBIAN_FRONTEND=noninteractive
+          sudo -E apt update -y
+          sudo -E apt full-upgrade -y
+          sudo -E apt install -y \
+            ack antlr3 asciidoc autoconf automake autopoint binutils bison \
+            build-essential bzip2 ccache clang cmake cpio curl \
+            device-tree-compiler flex gawk gcc-multilib g++-multilib gettext \
+            genisoimage git gperf haveged help2man intltool libc6-dev-i386 \
+            libelf-dev libfuse-dev libglib2.0-dev libgmp3-dev libltdl-dev \
+            libmpc-dev libmpfr-dev libncurses5-dev libncursesw5-dev \
+            libpython3-dev libreadline-dev libssl-dev libtool llvm lrzsz \
+            ninja-build p7zip p7zip-full patch pkgconf python3 \
+            python3-pyelftools python3-setuptools qemu-utils rsync scons \
+            squashfs-tools subversion swig texinfo uglifyjs upx-ucl unzip \
+            vim wget xmlto xxd xz-utils zlib1g-dev
+          sudo -E apt -y autoremove --purge
+          sudo -E apt clean
+
+      - name: Update feeds
+        working-directory: lede
+        run: |
+          # 启用 helloworld feed（科学上网插件依赖）
+          sed -i 's/^#src-git helloworld/src-git helloworld/g' feeds.conf.default
+          ./scripts/feeds update -a
+          ./scripts/feeds install -a
+
+      - name: Generate configuration
+        working-directory: lede
+        run: |
+          # 读取 fork 仓库根目录的 cmiot_ax18.config（若存在），
+          # 否则回退到本 workflow 内嵌的默认配置。
+          if [ -f ../cmiot_ax18.config ]; then
+            cp ../cmiot_ax18.config .config
+            echo "Using repository config: cmiot_ax18.config"
+          else
+            cat > .config <<'EOF'
+CONFIG_TARGET_qualcommax=y
+CONFIG_TARGET_qualcommax_ipq60xx=y
+CONFIG_TARGET_qualcommax_ipq60xx_DEVICE_cmiot_ax18=y
+CONFIG_CCACHE=y
+CONFIG_PACKAGE_luci=y
+CONFIG_PACKAGE_luci-i18n-base-zh-cn=y
+EOF
+            echo "Using embedded default config"
+          fi
+          # 展开配置并校验目标设备
+          make defconfig
+          grep -E "CONFIG_TARGET_qualcommax_ipq60xx_DEVICE_cmiot_ax18=y" .config && \
+            echo ">> target device OK" || { echo ">> target device MISSING"; exit 1; }
+          grep -q "CONFIG_TARGET_qualcommax_ipq60xx=y" .config || { echo ">> subtarget MISSING"; exit 1; }
+
+      - name: Download packages
+        working-directory: lede
+        run: make download -j$(nproc)
+
+      - name: Build firmware
+        working-directory: lede
+        run: |
+          # 首次编译建议先单线程跑通；失败后自动降级为 V=s 重试
+          make -j$(nproc) || make -j1 V=s
+          echo "======================="
+          echo "Build output:"
+          ls -lh bin/targets/qualcommax/ipq60xx/ 2>/dev/null || true
+
+      - name: Verify firmware artifacts
+        working-directory: lede
+        run: |
+          echo ">> Artifacts:"
+          ls -lh $TARGET_OUT/*.bin $TARGET_OUT/*.ubi 2>/dev/null || true
+          # 设备名必须出现在产物里，防止编错设备
+          if ls $TARGET_OUT/*cmiot_ax18* 1>/dev/null 2>&1; then
+            echo ">> OK: cmiot_ax18 firmware present"
+          else
+            echo ">> ERROR: no cmiot_ax18 firmware found"; exit 1
+          fi
+
+      - name: Upload firmware artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: cmiot-ax18-firmware-${{ github.run_number }}
+          path: |
+            lede/bin/targets/qualcommax/ipq60xx/*.bin
+            lede/bin/targets/qualcommax/ipq60xx/*.ubi
+          if-no-files-found: error
+
+      - name: Upload to GitHub Release
+        if: github.event_name == 'workflow_dispatch'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: cmiot-ax18-${{ github.run_number }}
+          name: CMIOT AX18 Firmware #${{ github.run_number }}
+          body: |
+            自动云编译产物（${{ github.event.inputs.build_ver || 'latest' }}）
+            - 平台: qualcommax/ipq60xx
+            - 设备: CMIOT AX18 (cmiot_ax18)
+          files: |
+            lede/bin/targets/qualcommax/ipq60xx/*.bin
+            lede/bin/targets/qualcommax/ipq60xx/*.ubi
+          fail_on_unmatched_files: false
