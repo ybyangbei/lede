@@ -106,13 +106,13 @@ jobs:
             echo "Using repository config: cmiot_ax18.config"
           else
             cat > .config <<'EOF'
-CONFIG_TARGET_qualcommax=y
-CONFIG_TARGET_qualcommax_ipq60xx=y
-CONFIG_TARGET_qualcommax_ipq60xx_DEVICE_cmiot_ax18=y
-CONFIG_CCACHE=y
-CONFIG_PACKAGE_luci=y
-CONFIG_PACKAGE_luci-i18n-base-zh-cn=y
-EOF
+          CONFIG_TARGET_qualcommax=y
+          CONFIG_TARGET_qualcommax_ipq60xx=y
+          CONFIG_TARGET_qualcommax_ipq60xx_DEVICE_cmiot_ax18=y
+          CONFIG_CCACHE=y
+          CONFIG_PACKAGE_luci=y
+          CONFIG_PACKAGE_luci-i18n-base-zh-cn=y
+          EOF
             echo "Using embedded default config"
           fi
           # 展开配置并校验目标设备
