@@ -71,10 +71,7 @@ jobs:
         run: |
           set -e
           export DEBIAN_FRONTEND=noninteractive
-          sudo -E apt update -y
-          sudo -E apt full-upgrade -y
-          sudo -E apt install -y \
-            ack antlr3 asciidoc autoconf automake autopoint binutils bison \
+          PKGS="ack antlr3 asciidoc autoconf automake autopoint binutils bison \
             build-essential bzip2 ccache clang cmake cpio curl \
             device-tree-compiler flex gawk gcc-multilib g++-multilib gettext \
             genisoimage git gperf haveged help2man intltool libc6-dev-i386 \
@@ -84,17 +81,25 @@ jobs:
             ninja-build p7zip p7zip-full patch pkgconf python3 \
             python3-pyelftools python3-setuptools qemu-utils rsync scons \
             squashfs-tools subversion swig texinfo uglifyjs upx-ucl unzip \
-            vim wget xmlto xxd xz-utils zlib1g-dev
-          sudo -E apt -y autoremove --purge
-          sudo -E apt clean
+            vim wget xmlto xxd xz-utils zlib1g-dev"
+          echo ">> Updating apt index ..."
+          sudo -E apt-get update -qq
+          echo ">> Installing build dependencies (quiet) ..."
+          # 静默安装；失败时以详细输出重跑便于排查
+          sudo -E apt-get install -y -qq $PKGS || \
+            { echo ">> install FAILED, retrying verbosely ..."; sudo -E apt-get install -y $PKGS; }
+          sudo -E apt-get autoremove --purge -y -qq
+          sudo -E apt-get clean
 
       - name: Update feeds
         working-directory: lede
         run: |
+          set -o pipefail
           # 启用 helloworld feed（科学上网插件依赖）
           sed -i 's/^#src-git helloworld/src-git helloworld/g' feeds.conf.default
-          ./scripts/feeds update -a
-          ./scripts/feeds install -a
+          echo ">> Updating feeds (log trimmed) ..."
+          ./scripts/feeds update -a 2>&1 | tail -n 20
+          ./scripts/feeds install -a 2>&1 | tail -n 10
 
       - name: Generate configuration
         working-directory: lede
@@ -115,36 +120,34 @@ jobs:
           EOF
             echo "Using embedded default config"
           fi
-          # 展开配置并校验目标设备
-          make defconfig
-          grep -E "CONFIG_TARGET_qualcommax_ipq60xx_DEVICE_cmiot_ax18=y" .config && \
-            echo ">> target device OK" || { echo ">> target device MISSING"; exit 1; }
+          # 展开配置并校验目标设备（静默，仅保留必要提示）
+          make -s defconfig 2>&1 | tail -n 10
+          grep -qE "CONFIG_TARGET_qualcommax_ipq60xx_DEVICE_cmiot_ax18=y" .config || { echo ">> target device MISSING"; exit 1; }
           grep -q "CONFIG_TARGET_qualcommax_ipq60xx=y" .config || { echo ">> subtarget MISSING"; exit 1; }
+          echo ">> config OK"
 
       - name: Download packages
         working-directory: lede
-        run: make download -j$(nproc)
+        run: |
+          set -o pipefail
+          echo ">> Downloading packages (log trimmed) ..."
+          make -s download -j$(nproc) 2>&1 | tail -n 20
 
       - name: Build firmware
         working-directory: lede
         run: |
-          # 首次编译建议先单线程跑通；失败后自动降级为 V=s 重试
-          make -j$(nproc) || make -j1 V=s
-          echo "======================="
-          echo "Build output:"
-          ls -lh bin/targets/qualcommax/ipq60xx/ 2>/dev/null || true
+          set -o pipefail
+          # 静默编译（仅保留尾部日志）；失败后自动降级为 V=s 详细重试
+          echo ">> Building firmware (silent, tail 40 lines) ..."
+          make -s -j$(nproc) 2>&1 | tail -n 40 || { echo ">> Build failed, retrying with V=s ..."; make -j1 V=s; }
+          echo ">> Build done, artifacts: $(ls -1 bin/targets/qualcommax/ipq60xx/*cmiot_ax18* 2>/dev/null | wc -l)"
 
       - name: Verify firmware artifacts
         working-directory: lede
         run: |
-          echo ">> Artifacts:"
-          ls -lh $TARGET_OUT/*.bin $TARGET_OUT/*.ubi 2>/dev/null || true
           # 设备名必须出现在产物里，防止编错设备
-          if ls $TARGET_OUT/*cmiot_ax18* 1>/dev/null 2>&1; then
-            echo ">> OK: cmiot_ax18 firmware present"
-          else
-            echo ">> ERROR: no cmiot_ax18 firmware found"; exit 1
-          fi
+          ls -1 $TARGET_OUT/*cmiot_ax18* >/dev/null 2>&1 || { echo ">> ERROR: no cmiot_ax18 firmware found"; exit 1; }
+          echo ">> OK: cmiot_ax18 firmware present"
 
       - name: Upload firmware artifacts
         uses: actions/upload-artifact@v4
