@@ -11,10 +11,11 @@
 # src-git passwall https://github.com/xiaorouji/openwrt-passwall.git
 # EOF
 
-# ---- 添加 helloworld feed（OpenClash 等科学上网包）----
-cat >> openwrt/feeds.conf.default <<EOF
-src-git helloworld https://github.com/coolsnowwolf/packages.git
-EOF
+# ---- 说明：lede 默认 feed 已自带所需的全部包 ----
+#   - luci-app-openclash 位于 luci feed（coolsnowwolf/luci/applications）
+#   - luci-app-zerotier / zerotier 位于 packages feed（coolsnowwolf/packages/net）
+#   - helloworld feed（fw876/helloworld）仅用于 ssr-plus 等，非本次所需
+# 因此无需追加任何自定义 feed。
 
 # ---- 示例：移除默认 feed（如不需要 helloworld，取消注释启用）----
 # sed -i '/helloworld/d' openwrt/feeds.conf.default
