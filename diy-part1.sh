@@ -11,6 +11,11 @@
 # src-git passwall https://github.com/xiaorouji/openwrt-passwall.git
 # EOF
 
+# ---- 添加 helloworld feed（OpenClash 等科学上网包）----
+cat >> openwrt/feeds.conf.default <<EOF
+src-git helloworld https://github.com/coolsnowwolf/packages.git
+EOF
+
 # ---- 示例：移除默认 feed（如不需要 helloworld，取消注释启用）----
 # sed -i '/helloworld/d' openwrt/feeds.conf.default
 
