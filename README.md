@@ -22,7 +22,7 @@
 | 文件 | 作用 |
 | --- | --- |
 | `.github/workflows/build-openwrt.yml` | GitHub Actions 工作流：克隆 lede → 更新 feeds → 载入配置 → 编译 → 上传固件/发布 Release |
-| `.config` | 种子配置：目标平台 cmiot_ax18 + LuCI + 常用组件（`make defconfig` 自动补全） |
+| `.config` | 种子配置：目标平台 cmiot_ax18 + LuCI + 常用组件（`make defconfig` 自动补全）。已启用 OpenClash、ZeroTier |
 | `diy-part1.sh` | feeds 更新前执行：添加自定义 feed 等 |
 | `diy-part2.sh` | feeds 安装后执行：改默认 IP、删默认包、打补丁等 |
 | `README.md` | 本说明 |
